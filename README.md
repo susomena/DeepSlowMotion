@@ -22,3 +22,9 @@ In order to download both datasets with the script, just type the following comm
 ```
 
 where `path_to_folder` is the directory where the dataset should be downloaded. This directory is created if it does not exist.
+
+The loss function includes a term that depends on the activations of a convolutional layer of the VGG16 neural network. The pretrained  weights of the VGG16 neural networks are stored in the `vgg16_weights_no_fc.npz` file. This file is a modified version of the file that can be found in [this link](https://www.cs.toronto.edu/~frossard/post/vgg16/). In order to reduce the size of the file, the weights of the fully connected layers have been removed. For more information on the VGG16 neural network, please see:
+
+>K. Simonyan and A. Zisserman, "Very Deep Convolutional Networks for Large-Scale Image Recognition," Proceedings of the International Conference on Learning Representations (ICLR), San Diego, CA, USA, 2015, pp. 1-14.
+
+or go to: [arXiv:1409.1556](https://arxiv.org/pdf/1409.1556.pdf)
