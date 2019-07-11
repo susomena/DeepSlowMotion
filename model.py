@@ -134,3 +134,22 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
                              'ReLU or hyperbolic tangent')
 
     return y
+
+
+def flow_computation_model(x):
+    """
+    This function returns the model of the flow computation network.
+    :param x: the input of the flow computation network
+    :return: the output of the flow computation network
+    """
+    return unet_model(x, 4, 'lrelu', 'flow_comp')
+
+
+def arbitrary_time_flow_interpolation_model(x):
+    """
+    This function returns the model of the arbitrary-time flow interpolation
+    network.
+    :param x: the input of the arbitrary-time flow interpolation network
+    :return: the output of the arbitrary-time flow interpolation network
+    """
+    return unet_model(x, 5, 'tanh', 'flow_interp')
