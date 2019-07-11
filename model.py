@@ -1,6 +1,8 @@
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
+from vgg16 import VGG16
+
 
 def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
     """
@@ -153,3 +155,50 @@ def arbitrary_time_flow_interpolation_model(x):
     :return: the output of the arbitrary-time flow interpolation network
     """
     return unet_model(x, 5, 'tanh', 'flow_interp')
+
+
+def reconstruction_loss(ground_truth, prediction):
+    """
+    This function computes the reconstruction loss of a list of predicted
+    intermediate frames. Instead of using L1 loss like in the original work of
+    Jiang at al., Charbonnier loss is used in order to have a smooth loss
+    function at zero.
+    :param ground_truth: list of real intermediate frames to be predicted
+    :param prediction: list of predicted intermediate frames
+    :return: the value of the reconstruction loss
+    """
+    l_r = 0.
+
+    for i in range(len(ground_truth)):
+        l_r += tf.reduce_sum(tf.sqrt(
+            tf.square(ground_truth[i] - prediction[i]) + 0.01 ** 2), axis=3)
+
+    l_r /= len(ground_truth)
+
+    return l_r
+
+
+def perceptual_loss(ground_truth, prediction):
+    """
+    This function computes the perceptual loss of a list of predicted
+    intermediate frames. According to Jiang et al., this loss function is equal
+    to the mean squared L2 norm of the difference between the activation of the
+    conv4_3 layer of the VGG16 layer for the intermediate frame to be predicted
+    and the predicted intermediate frame.
+    :param ground_truth: list of real intermediate frames to be predicted
+    :param prediction: list of predicted intermediate frames
+    :return: the value of the perceptual loss
+    """
+    vgg_net = VGG16()
+    l_p = 0.
+
+    for i in range(len(ground_truth)):
+        ground_truth_feat = vgg_net(ground_truth[i])
+        prediction_feat = vgg_net(prediction[i])
+
+        l_p += tf.reduce_sum(
+            tf.square(ground_truth_feat - prediction_feat), axis=3)
+
+    l_p /= len(ground_truth)
+
+    return l_p
