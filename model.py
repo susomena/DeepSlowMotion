@@ -4,6 +4,56 @@ import tensorflow.contrib.slim as slim
 from vgg16 import VGG16
 
 
+def clip(x, min_value, max_value):
+    """
+    This function clips a value x to keep it between a minimum value and a
+    maximum value.
+    :param x: the value to be clipped
+    :param min_value: the minimum value for x
+    :param max_value: tha maximum value for x
+    :return: the value of x clipped to the minimum and maximum values
+    """
+    return tf.math.maximum(min_value, tf.math.minimum(max_value, x))
+
+
+def bilinear_warping(img, f_x, f_y):
+    """
+    This function computes the frame result of warping an initial frame img
+    with an optical flow (represented by its components f_x and f_y).
+    :param img: The image to be warped
+    :param f_x: x component of the optical flow
+    :param f_y: y component of the optical flow
+    :return: the warped image
+    """
+    batch_size, height, width, num_feature_maps = img.get_shape().as_list()
+    v_x = (f_x + 1) / 2 * (width - 1)
+    v_y = (f_y + 1) / 2 * (height - 1)
+
+    v_x0 = clip(tf.floor(v_x), 0., width - 1.)
+    v_x1 = clip(v_x0 + 1., 0., width - 1.)
+    v_y0 = clip(tf.floor(v_y), 0., height - 1.)
+    v_y1 = clip(v_y0 + 1., 0., height - 1.)
+
+    v_00 = tf.cast(tf.concat([v_y0, v_x0], axis=3), dtype=tf.int32)
+    v_01 = tf.cast(tf.concat([v_y1, v_x0], axis=3), dtype=tf.int32)
+    v_10 = tf.cast(tf.concat([v_y0, v_x1], axis=3), dtype=tf.int32)
+    v_11 = tf.cast(tf.concat([v_y1, v_x1], axis=3), dtype=tf.int32)
+
+    img_00 = tf.cast(tf.gather_nd(img, v_00, batch_dims=1), dtype=tf.float32)
+    img_01 = tf.cast(tf.gather_nd(img, v_01, batch_dims=1), dtype=tf.float32)
+    img_10 = tf.cast(tf.gather_nd(img, v_10, batch_dims=1), dtype=tf.float32)
+    img_11 = tf.cast(tf.gather_nd(img, v_11, batch_dims=1), dtype=tf.float32)
+
+    w_00 = (v_x1 - v_x) * (v_y1 - v_y)
+    w_01 = (v_x1 - v_x) * (1 - (v_y1 - v_y))
+    w_10 = (1 - (v_x1 - v_x)) * (v_y1 - v_y)
+    w_11 = (1 - (v_x1 - v_x)) * (1 - (v_y1 - v_y))
+
+    o = tf.add_n([w_00 * img_00, w_01 * img_01, w_10 * img_10, w_11 * img_11])
+
+    return o,
+
+
 def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
     """
     Generic U-net model for both, the flow computation network and the
