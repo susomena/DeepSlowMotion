@@ -1,3 +1,5 @@
+from __future__ import division
+
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
@@ -16,16 +18,19 @@ def clip(x, min_value, max_value):
     return tf.math.maximum(min_value, tf.math.minimum(max_value, x))
 
 
-def bilinear_warping(img, f_x, f_y):
+def bilinear_warping(img, f):
     """
     This function computes the frame result of warping an initial frame img
-    with an optical flow (represented by its components f_x and f_y).
-    :param img: The image to be warped
-    :param f_x: x component of the optical flow
-    :param f_y: y component of the optical flow
+    with an optical flow.
+    :param img: the image to be warped
+    :param f: optical flow
     :return: the warped image
     """
     batch_size, height, width, num_feature_maps = img.get_shape().as_list()
+
+    f_x = f[:, :, :, 0:1]
+    f_y = f[:, :, :, 1:2]
+
     v_x = (f_x + 1) / 2 * (width - 1)
     v_y = (f_y + 1) / 2 * (height - 1)
 
@@ -124,7 +129,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
         net = tf.nn.leaky_relu(net, alpha=0.1)
 
         # DECODER HIERARCHY 1
-        shape = tf.slice(tf.shape(enc_5), [1], [2])
+        shape = tf.shape(enc_5)[1:3]
         net = tf.image.resize_bilinear(net, shape)
         net = tf.concat([enc_5, net], axis=3)
         net = slim.conv2d(net, 512, [3, 3], activation_fn=None,
@@ -135,7 +140,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
         net = tf.nn.leaky_relu(net, alpha=0.1)
 
         # DECODER HIERARCHY 2
-        shape = tf.slice(tf.shape(enc_4), [1], [2])
+        shape = tf.shape(enc_4)[1:3]
         net = tf.image.resize_bilinear(net, shape)
         net = tf.concat([enc_4, net], axis=3)
         net = slim.conv2d(net, 256, [3, 3], activation_fn=None,
@@ -146,7 +151,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
         net = tf.nn.leaky_relu(net, alpha=0.1)
 
         # DECODER HIERARCHY 3
-        shape = tf.slice(tf.shape(enc_3), [1], [2])
+        shape = tf.shape(enc_3)[1:3]
         net = tf.image.resize_bilinear(net, shape)
         net = tf.concat([enc_3, net], axis=3)
         net = slim.conv2d(net, 128, [3, 3], activation_fn=None,
@@ -157,7 +162,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
         net = tf.nn.leaky_relu(net, alpha=0.1)
 
         # DECODER HIERARCHY 4
-        shape = tf.slice(tf.shape(enc_2), [1], [2])
+        shape = tf.shape(enc_2)[1:3]
         net = tf.image.resize_bilinear(net, shape)
         net = tf.concat([enc_2, net], axis=3)
         net = slim.conv2d(net, 64, [3, 3], activation_fn=None,
@@ -168,7 +173,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix):
         net = tf.nn.leaky_relu(net, alpha=0.1)
 
         # DECODER HIERARCHY 5
-        shape = tf.slice(tf.shape(enc_1), [1], [2])
+        shape = tf.shape(enc_1)[1:3]
         net = tf.image.resize_bilinear(net, shape)
         net = tf.concat([enc_1, net], axis=3)
         net = slim.conv2d(net, 32, [3, 3], activation_fn=None,
@@ -207,6 +212,29 @@ def arbitrary_time_flow_interpolation_model(x):
     return unet_model(x, 5, 'tanh', 'flow_interp')
 
 
+def charbonnier_loss(ground_truth, prediction, e=0.01):
+    """
+    This function computes the Charbonnier loss of a predicted tensor.
+    :param ground_truth: the tensor to be predicted
+    :param prediction: the predicted tensor
+    :param e: small quantity added to the squared difference between the ground
+    truth and the prediction used to smooth the loss function
+    :return: the value of the Charbonnier loss
+    """
+    return tf.reduce_sum(tf.sqrt(
+        tf.square(ground_truth - prediction) + e ** 2), axis=3)
+
+
+def l2_loss(ground_truth, prediction):
+    """
+    This function computes the L2 loss of a predicted tensor.
+    :param ground_truth: the tensor to be predicted
+    :param prediction: the predicted tensor
+    :return: the value of the L2 loss
+    """
+    return tf.reduce_sum(tf.square(ground_truth - prediction), axis=3)
+
+
 def reconstruction_loss(ground_truth, prediction):
     """
     This function computes the reconstruction loss of a list of predicted
@@ -220,8 +248,7 @@ def reconstruction_loss(ground_truth, prediction):
     l_r = 0.
 
     for i in range(len(ground_truth)):
-        l_r += tf.reduce_sum(tf.sqrt(
-            tf.square(ground_truth[i] - prediction[i]) + 0.01 ** 2), axis=3)
+        l_r += charbonnier_loss(ground_truth[i], prediction[i])
 
     l_r /= len(ground_truth)
 
@@ -246,9 +273,55 @@ def perceptual_loss(ground_truth, prediction):
         ground_truth_feat = vgg_net(ground_truth[i])
         prediction_feat = vgg_net(prediction[i])
 
-        l_p += tf.reduce_sum(
-            tf.square(ground_truth_feat - prediction_feat), axis=3)
+        l_p += l2_loss(ground_truth_feat, prediction_feat)
 
     l_p /= len(ground_truth)
 
     return l_p
+
+
+def warping_loss(i_0, i_1, i_t, f_01, f_10, f_t0, f_t1):
+    """
+    This function computes the warping loss of the reconstruction of all the
+    frames using the predicted optical flow.
+    :param i_0: first frame of the sample (ground truth)
+    :param i_1: last frame of the sample (ground truth)
+    :param i_t: list of intermediate frames (ground truth)
+    :param f_01: predicted optical flow from the first frame to the last frame
+    :param f_10: predicted optical flow from the last frame to the first frame
+    :param f_t0: list of predicted optical flows from the intermediate frames
+    to the first frame
+    :param f_t1: list of predicted optical flows from the intermediate frames
+    to the last frame
+    :return: the value of the warping loss
+    """
+    l_w = charbonnier_loss(i_0, bilinear_warping(i_1, f_01))
+    l_w += charbonnier_loss(i_1, bilinear_warping(i_0, f_10))
+
+    for i in range(len(i_t)):
+        l_w += (1. / len(i_t)) * charbonnier_loss(
+            i_t[i], bilinear_warping(i_0, f_t0[i]))
+
+        l_w += (1. / len(i_t)) * charbonnier_loss(
+            i_t[i], bilinear_warping(i_1, f_t1[i]))
+
+    return l_w
+
+
+def smoothness_loss(f_01, f_10):
+    """
+    This function computes the smoothness loss of the predicted optical flows
+    between the first and the last frames. According to Jiang et al., the
+    smoothness loss is computed as the total variation loss of the optical
+    flows.
+    :param f_01: optical flow from the first to the last frame
+    :param f_10: optical flow from the last to the first frame
+    :return: the value of the smoothness loss
+    """
+    l_s = charbonnier_loss(f_01[:, 1:, :, :], f_01[:, :-1, :, :])
+    l_s += charbonnier_loss(f_01[:, :, 1:, :], f_01[:, :, :-1, :])
+
+    l_s += charbonnier_loss(f_10[:, 1:, :, :], f_10[:, :-1, :, :])
+    l_s += charbonnier_loss(f_10[:, :, 1:, :], f_10[:, :, :-1, :])
+
+    return l_s
