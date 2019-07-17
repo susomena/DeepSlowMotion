@@ -57,6 +57,15 @@ class Data:
 
         self._train_set += reversed_samples
 
+    def get_epoch_iterations(self, batch_size):
+        """
+        This function returns the number of iterations for an epoch with a
+        given batch size.
+        :param batch_size: size of the batches
+        :return: number of iterations for an epoch with the given batch size
+        """
+        return len(self._train_set) / batch_size
+
 
 def get_frames(path_list):
     """
