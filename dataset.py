@@ -2,6 +2,9 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import random
+
+from scipy.misc import imread
 
 
 class Data:
@@ -53,18 +56,53 @@ class Data:
         reversed_samples = []
 
         for s in self._train_set:
-            reversed_samples.append(reversed(s))
+            reversed_samples.append(list(reversed(s)))
 
         self._train_set += reversed_samples
 
-    def get_epoch_iterations(self, batch_size):
+    def get_num_batches(self, batch_size):
         """
-        This function returns the number of iterations for an epoch with a
+        This function returns the number of batches in the training set for a
         given batch size.
         :param batch_size: size of the batches
-        :return: number of iterations for an epoch with the given batch size
+        :type batch_size: int
+        :return: number of batches in the training set for the given batch size
+        :rtype: int
         """
-        return len(self._train_set) / batch_size
+        return len(self._train_set) // batch_size
+
+    def shuffle(self):
+        """
+        This function randomly permutes the training set, so next time batches
+        won't be the same.
+        """
+        random.shuffle(self._train_set)
+
+    def get_batch(self, i, batch_size):
+        """
+        This function returns the batch in position i for batches with a given
+        batch size.
+        :param i: index of the batch in the training set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: training batch in position i for the given batch size
+        :rtype: (list, list, list[list])
+        """
+        batch_files = self._train_set[i * batch_size:(i + 1) * batch_size]
+
+        i0 = []
+        i1 = []
+        for s in batch_files:
+            i0.append((imread(s[0]) - 127.5) / 255.)
+            i1.append((imread(s[-1]) - 127.5) / 255.)
+
+        it = [[] for _ in range(len(batch_files[0]) - 2)]
+        for i in range(len(it)):
+            for j in range(batch_size):
+                it[i].append((imread(batch_files[j][i + 1]) - 127.5) / 255.)
+
+        return i0, i1, it
 
 
 def get_frames(path_list):

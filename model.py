@@ -59,17 +59,13 @@ def bilinear_warping(img, f):
     return o
 
 
-def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix,
-               reuse):
+def unet_model(x, output_feature_maps, scope_prefix, reuse):
     """
     Generic U-net model for both, the flow computation network and the
     arbitrary-time flow interpolation network.
     :param x: input tensor of the network
     :param output_feature_maps: number of feature maps in the output of the
     network
-    :param output_activation_fn: string indicating what activation function to
-    use for the output of the network. Only 'lrelu' and 'tanh' values are
-    allowed
     :param scope_prefix: prefix to differentiate the scope of the flow
     computation network and the scope of the arbitrary-time flow interpolation
     network
@@ -185,13 +181,7 @@ def unet_model(x, output_feature_maps, output_activation_fn, scope_prefix,
         net = slim.conv2d(net, output_feature_maps, [3, 3], activation_fn=None,
                           scope=scope_prefix + '_dec_conv5_2')
 
-        if output_activation_fn == 'lrelu':
-            y = tf.nn.leaky_relu(net, alpha=0.1)
-        elif output_activation_fn == 'tanh':
-            y = 127.5 * (tf.nn.tanh(net) + 1)  # Scaling back to [0, 255]
-        else:
-            raise ValueError('The output activation function can only be leaky'
-                             'ReLU or hyperbolic tangent')
+        y = tf.nn.tanh(net)
 
     return y
 
@@ -204,19 +194,19 @@ def flow_computation_model(x, reuse=None):
     starting from the second call to a model in a same graph)
     :return: the output of the flow computation network
     """
-    return unet_model(x, 4, 'lrelu', 'flow_comp', reuse)
+    return unet_model(x, 4, 'flow_comp', reuse)
 
 
 def arbitrary_time_flow_interpolation_model(x, reuse=None):
     """
     This function returns the model of the arbitrary-time flow interpolation
-    network.
+    network. The value of the pixels is scaled back to [0, 255].
     :param x: the input of the arbitrary-time flow interpolation network
     :param reuse: whether to reuse training variables or not (mandatory
     starting from the second call to a model in a same graph)
     :return: the output of the arbitrary-time flow interpolation network
     """
-    return unet_model(x, 5, 'tanh', 'flow_interp', reuse)
+    return 127.5 * (unet_model(x, 5, 'flow_interp', reuse) + 1)
 
 
 def charbonnier_loss(ground_truth, prediction, e=0.01):

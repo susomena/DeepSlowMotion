@@ -39,6 +39,8 @@ parser.add_argument('-de', '--decay-epochs', default=200, type=int,
                     help='Number of epochs for decreasing learning rate')
 parser.add_argument('-df', '--decay-factor', default=0.1, type=float,
                     help='Factor for decreasing learning rate')
+parser.add_argument('-e', '--epochs', default=500, type=int,
+                    help='Number of training epochs')
 
 args = parser.parse_args()
 
@@ -108,10 +110,32 @@ with graph.as_default():
     loss += args.lambda_s * l_s
 
     global_step = tf.Variable(0)
-    decay_iter = args.decay_epochs * data.get_epoch_iterations(args.batch_size)
+    decay_iter = args.decay_epochs * data.get_num_batches(args.batch_size)
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step,
                                                decay_iter, args.decay_factor,
                                                staircase=True)
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
     saver = tf.train.Saver()
+
+with tf.Session(graph=graph) as session:
+    session.run(tf.global_variables_initializer())
+    print('Initialized')
+
+    for epoch in range(args.epochs):
+        data.shuffle()
+
+        epoch_loss = 0.
+        for batch in range(data.get_num_batches(args.batch_size)):
+            i0, i1, it = data.get_batch(batch, args.batch_size)
+            d = {tf_i0: i0, tf_i1: i1}
+
+            for i in range(args.frames):
+                d[tf_frames[i]] = it[i]
+
+            _, step_loss = session.run([optimizer, loss], feed_dict=d)
+            print('\tBatch %d' % batch)
+            epoch_loss += step_loss
+
+        epoch_loss /= data.get_num_batches(args.batch_size)
+        print('Mean loss at epoch %d: %f' % (epoch, epoch_loss))
