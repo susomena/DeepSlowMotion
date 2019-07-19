@@ -122,20 +122,25 @@ with tf.Session(graph=graph) as session:
     session.run(tf.global_variables_initializer())
     print('Initialized')
 
+    if args.data_augmentation:
+        data_retrieval_functions = [data.get_batch, data.get_flipped_batch]
+    else:
+        data_retrieval_functions = [data.get_batch]
+
     for epoch in range(args.epochs):
         data.shuffle()
 
         epoch_loss = 0.
         for batch in range(data.get_num_batches(args.batch_size)):
-            i0, i1, it = data.get_batch(batch, args.batch_size)
-            d = {tf_i0: i0, tf_i1: i1}
+            for f in data_retrieval_functions:
+                i0, i1, it = f(batch, args.batch_size)
+                d = {tf_i0: i0, tf_i1: i1}
 
-            for i in range(args.frames):
-                d[tf_frames[i]] = it[i]
+                for i in range(args.frames):
+                    d[tf_frames[i]] = it[i]
 
-            _, step_loss = session.run([optimizer, loss], feed_dict=d)
-            print('\tBatch %d' % batch)
-            epoch_loss += step_loss
+                _, step_loss = session.run([optimizer, loss], feed_dict=d)
+                epoch_loss += step_loss
 
         epoch_loss /= data.get_num_batches(args.batch_size)
         print('Mean loss at epoch %d: %f' % (epoch, epoch_loss))

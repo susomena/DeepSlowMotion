@@ -4,6 +4,7 @@ from __future__ import print_function
 import os
 import random
 
+import numpy as np
 from scipy.misc import imread
 
 
@@ -101,6 +102,35 @@ class Data:
         for i in range(len(it)):
             for j in range(batch_size):
                 it[i].append((imread(batch_files[j][i + 1]) - 127.5) / 255.)
+
+        return i0, i1, it
+
+    def get_flipped_batch(self, i, batch_size):
+        """
+        This function returns the batch in position i for batches with a given
+        batch size. The pictures in this batch are horizontally flipped for
+        data augmentation.
+        :param i: index of the batch in the training set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: training batch in position i for the given batch size with
+        horizontally flipped pictures
+        :rtype: (list, list, list[list])
+        """
+        batch_files = self._train_set[i * batch_size:(i + 1) * batch_size]
+
+        i0 = []
+        i1 = []
+        for s in batch_files:
+            i0.append(np.fliplr((imread(s[0]) - 127.5) / 255.))
+            i1.append(np.fliplr((imread(s[-1]) - 127.5) / 255.))
+
+        it = [[] for _ in range(len(batch_files[0]) - 2)]
+        for i in range(len(it)):
+            for j in range(batch_size):
+                it[i].append(np.fliplr(
+                    (imread(batch_files[j][i + 1]) - 127.5) / 255.))
 
         return i0, i1, it
 
