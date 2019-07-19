@@ -42,6 +42,7 @@ class Data:
 
         train_limit = (train_percentage / 100) * len(samples)
         val_limit = ((train_percentage + val_percentage) / 100) * len(samples)
+        random.shuffle(samples)
         self._train_set = samples[0:int(train_limit)]
         self._validation_set = samples[int(train_limit):int(val_limit)]
         self._test_set = samples[int(val_limit):]
@@ -61,7 +62,7 @@ class Data:
 
         self._train_set += reversed_samples
 
-    def get_num_batches(self, batch_size):
+    def num_train_batches(self, batch_size):
         """
         This function returns the number of batches in the training set for a
         given batch size.
@@ -72,6 +73,29 @@ class Data:
         """
         return len(self._train_set) // batch_size
 
+    def num_valid_batches(self, batch_size):
+        """
+        This function returns the number of batches in the validation set for a
+        given batch size.
+        :param batch_size: size of the batches
+        :type batch_size: int
+        :return: number of batches in the validation set for the given batch
+        size
+        :rtype: int
+        """
+        return len(self._validation_set) // batch_size
+
+    def num_test_batches(self, batch_size):
+        """
+        This function returns the number of batches in the test set for a given
+        batch size.
+        :param batch_size: size of the batches
+        :type batch_size: int
+        :return: number of batches in the test set for the given batch size
+        :rtype: int
+        """
+        return len(self._test_set) // batch_size
+
     def shuffle(self):
         """
         This function randomly permutes the training set, so next time batches
@@ -79,18 +103,22 @@ class Data:
         """
         random.shuffle(self._train_set)
 
-    def get_batch(self, i, batch_size):
+    @staticmethod
+    def _get_batch(i, batch_size, target_set):
         """
-        This function returns the batch in position i for batches with a given
-        batch size.
-        :param i: index of the batch in the training set
+        This function returns the batch of the target set in position i for
+        batches with a given batch size.
+        :param i: index of the batch in the target set
         :param batch_size: size of the batches
+        :param target_set: the set the target batch belongs to (training,
+        validation, or test)
         :type i: int
         :type batch_size: int
-        :return: training batch in position i for the given batch size
+        :type target_set: list[list[str]]
+        :return: batch in position i for the given batch size
         :rtype: (list, list, list[list])
         """
-        batch_files = self._train_set[i * batch_size:(i + 1) * batch_size]
+        batch_files = target_set[i * batch_size:(i + 1) * batch_size]
 
         i0 = []
         i1 = []
@@ -105,20 +133,24 @@ class Data:
 
         return i0, i1, it
 
-    def get_flipped_batch(self, i, batch_size):
+    @staticmethod
+    def _get_flipped_batch(i, batch_size, target_set):
         """
-        This function returns the batch in position i for batches with a given
-        batch size. The pictures in this batch are horizontally flipped for
-        data augmentation.
-        :param i: index of the batch in the training set
+        This function returns the batch of the target set in position i for
+        batches with a given batch size. The pictures in this batch are
+        horizontally flipped for data augmentation.
+        :param i: index of the batch in the target set
         :param batch_size: size of the batches
+        :param target_set: the set the target batch belongs to (training,
+        validation, or test)
         :type i: int
         :type batch_size: int
-        :return: training batch in position i for the given batch size with
-        horizontally flipped pictures
+        :type target_set: list[list[str]]
+        :return: batch in position i for the given batch size with horizontally
+        flipped pictures
         :rtype: (list, list, list[list])
         """
-        batch_files = self._train_set[i * batch_size:(i + 1) * batch_size]
+        batch_files = target_set[i * batch_size:(i + 1) * batch_size]
 
         i0 = []
         i1 = []
@@ -133,6 +165,59 @@ class Data:
                     (imread(batch_files[j][i + 1]) - 127.5) / 255.))
 
         return i0, i1, it
+
+    def get_training_batch(self, i, batch_size):
+        """
+        This function returns the training batch in position i for batches with
+        a given batch size.
+        :param i: index of the batch in the training set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: training batch in position i for the given batch size
+        :rtype: (list, list, list[list])
+        """
+        return self._get_batch(i, batch_size, self._train_set)
+
+    def get_training_flipped_batch(self, i, batch_size):
+        """
+        This function returns the training batch in position i for batches with
+        a given batch size. The pictures in this batch are horizontally flipped
+        for data augmentation.
+        :param i: index of the batch in the training set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: training batch in position i for the given batch size
+        :rtype: (list, list, list[list])
+        """
+        return self._get_flipped_batch(i, batch_size, self._train_set)
+
+    def get_validation_batch(self, i, batch_size):
+        """
+        This function returns the validation batch in position i for batches
+        with a given batch size.
+        :param i: index of the batch in the validation set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: validation batch in position i for the given batch size
+        :rtype: (list, list, list[list])
+        """
+        return self._get_batch(i, batch_size, self._validation_set)
+
+    def get_test_batch(self, i, batch_size):
+        """
+        This function returns the test batch in position i for batches with a
+        given batch size.
+        :param i: index of the batch in the test set
+        :param batch_size: size of the batches
+        :type i: int
+        :type batch_size: int
+        :return: test batch in position i for the given batch size
+        :rtype: (list, list, list[list])
+        """
+        return self._get_batch(i, batch_size, self._test_set)
 
 
 def get_frames(path_list):

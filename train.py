@@ -82,7 +82,8 @@ with graph.as_default():
         concat_list = [tf_i0, tf_i1, f_01, f_10, f_t0, f_t1, g_0, g_1]
 
         flow_interp_input = tf.concat(concat_list, axis=3)
-        o = model.arbitrary_time_flow_interpolation_model(flow_interp_input, reuse=reuse)
+        o = model.arbitrary_time_flow_interpolation_model(flow_interp_input,
+                                                          reuse=reuse)
 
         v_t0 = o[:, :, :, :1]
         v_t1 = o[:, :, :, 1:2]
@@ -110,7 +111,7 @@ with graph.as_default():
     loss += args.lambda_s * l_s
 
     global_step = tf.Variable(0)
-    decay_iter = args.decay_epochs * data.get_num_batches(args.batch_size)
+    decay_iter = args.decay_epochs * data.num_train_batches(args.batch_size)
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step,
                                                decay_iter, args.decay_factor,
                                                staircase=True)
@@ -123,15 +124,16 @@ with tf.Session(graph=graph) as session:
     print('Initialized')
 
     if args.data_augmentation:
-        data_retrieval_functions = [data.get_batch, data.get_flipped_batch]
+        data_retrieval_functions = [data.get_training_batch, data.get_training_flipped_batch]
     else:
-        data_retrieval_functions = [data.get_batch]
+        data_retrieval_functions = [data.get_training_batch]
 
+    min_validation_loss = -1
     for epoch in range(args.epochs):
         data.shuffle()
 
         epoch_loss = 0.
-        for batch in range(data.get_num_batches(args.batch_size)):
+        for batch in range(data.num_train_batches(args.batch_size)):
             for f in data_retrieval_functions:
                 i0, i1, it = f(batch, args.batch_size)
                 d = {tf_i0: i0, tf_i1: i1}
@@ -142,6 +144,39 @@ with tf.Session(graph=graph) as session:
                 _, step_loss = session.run([optimizer, loss], feed_dict=d)
                 epoch_loss += step_loss
 
-        epoch_loss /= data.get_num_batches(args.batch_size)
+        epoch_loss /= data.num_train_batches(args.batch_size)
         epoch_loss /= len(data_retrieval_functions)
         print('Mean loss at epoch %d: %f' % (epoch, epoch_loss))
+
+        validation_loss = 0.
+        for batch in range(data.num_valid_batches(args.batch_size)):
+            i0, i1, it = data.get_validation_batch(batch, args.batch_size)
+            d = {tf_i0: i0, tf_i1: i1}
+
+            for i in range(args.frames):
+                d[tf_frames[i]] = it[i]
+
+            step_loss = session.run([loss], feed_dict=d)[0]
+            validation_loss += step_loss
+
+        validation_loss /= data.num_valid_batches(args.batch_size)
+        print('Validation loss: %f' % validation_loss)
+
+        if min_validation_loss == -1 or min_validation_loss > validation_loss:
+            min_validation_loss = validation_loss
+            print('Saving model...')
+            saver.save(session, 'model')
+
+    test_loss = 0.
+    for batch in range(data.num_test_batches(args.batch_size)):
+        i0, i1, it = data.get_test_batch(batch, args.batch_size)
+        d = {tf_i0: i0, tf_i1: i1}
+
+        for i in range(args.frames):
+            d[tf_frames[i]] = it[i]
+
+        step_loss = session.run([loss], feed_dict=d)[0]
+        test_loss += step_loss
+
+    test_loss /= data.num_test_batches(args.batch_size)
+    print('Test loss: %f' % test_loss)
