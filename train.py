@@ -143,4 +143,5 @@ with tf.Session(graph=graph) as session:
                 epoch_loss += step_loss
 
         epoch_loss /= data.get_num_batches(args.batch_size)
+        epoch_loss /= len(data_retrieval_functions)
         print('Mean loss at epoch %d: %f' % (epoch, epoch_loss))
