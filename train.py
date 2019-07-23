@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -115,7 +116,8 @@ with graph.as_default():
     learning_rate = tf.train.exponential_decay(args.learning_rate, global_step,
                                                decay_iter, args.decay_factor,
                                                staircase=True)
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss,
+                                                               global_step)
 
     saver = tf.train.Saver()
 
@@ -123,13 +125,25 @@ with tf.Session(graph=graph) as session:
     session.run(tf.global_variables_initializer())
     print('Initialized')
 
+    start_epoch = 0
+    min_validation_loss = -1
+    if os.path.exists('model/model.index'):
+        saver.restore(session, 'model/model')
+        start_epoch = session.run(global_step)
+        start_epoch /= data.num_train_batches(args.batch_size)
+
+        vf = open('model/val')
+        min_validation_loss = float(vf.read())
+        vf.close()
+
     if args.data_augmentation:
-        data_retrieval_functions = [data.get_training_batch, data.get_training_flipped_batch]
+        data_retrieval_functions = [data.get_training_batch,
+                                    data.get_training_flipped_batch]
     else:
         data_retrieval_functions = [data.get_training_batch]
 
-    min_validation_loss = -1
-    for epoch in range(args.epochs):
+    start_epoch /= len(data_retrieval_functions)
+    for epoch in range(int(start_epoch), args.epochs):
         data.shuffle()
 
         epoch_loss = 0.
@@ -165,7 +179,15 @@ with tf.Session(graph=graph) as session:
         if min_validation_loss == -1 or min_validation_loss > validation_loss:
             min_validation_loss = validation_loss
             print('Saving model...')
-            saver.save(session, 'model')
+
+            if not os.path.exists('model'):
+                os.mkdir('model')
+
+            saver.save(session, 'model/model')
+
+            vf = open('model/val', 'w')
+            vf.write('%f' % min_validation_loss)
+            vf.close()
 
     test_loss = 0.
     for batch in range(data.num_test_batches(args.batch_size)):
