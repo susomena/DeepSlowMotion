@@ -10,7 +10,7 @@ import tensorflow as tf
 from dataset import Data
 import model
 
-parser = argparse.ArgumentParser(description='Trains a neural network for'
+parser = argparse.ArgumentParser(description='Trains a neural network for '
                                              'video frame interpolation.')
 
 parser.add_argument('-d', '--datasets', type=str,
